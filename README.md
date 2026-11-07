@@ -20,7 +20,11 @@ Installare `requirements.txt`, poi eseguire `python scripts/build_book.py` dalla
 
 ## Nota sul manoscritto
 
-L’indice del Word menziona due testi inglesi in appendice, ma il file non li contiene. L’edizione digitale segnala l’assenza e conserva tutto il contenuto disponibile. La presentazione di Michele Serra e il suo recapito email sono stati forniti per la pubblicazione.
+Il Word non contiene i due documenti inglesi citati nell’indice. Questi sono stati aggiunti all’appendice a partire dal PDF fornito successivamente: rapporto di E. E. Lewis (34 pagine) e confessione di Margaret Fox Kane (3 pagine). Le trascrizioni revisionate sono conservate in `sources/appendici/`; le riproduzioni delle pagine, ottimizzate per il web e con testo selezionabile, sono in `site/assets/appendice-lewis-en.pdf` e `site/assets/appendice-fox-en.pdf`. Il generatore le unisce al libro e inserisce le trascrizioni nella lettura online. La confessione proviene da una stampa web che riporta il testo del 1888. Le grafie e i refusi della copia sono conservati; menu e pubblicità non sono inclusi nella trascrizione online.
+
+`scripts/prepare_appendix.py` prepara i due PDF ottimizzati e copia le trascrizioni dagli elaborati locali in `output/appendici-inglesi/`. Non è necessario rieseguirlo per rigenerare il libro: i documenti preparati e le trascrizioni sono già versionati. Gli elaborati di revisione e i registri delle correzioni rimangono in `output/`, esclusa dal repository.
+
+La presentazione di Michele Serra e il suo recapito email sono stati forniti per la pubblicazione.
 
 ## Pubblicazione
 
