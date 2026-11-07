@@ -16,7 +16,7 @@
   for(const a of links) a.addEventListener('click',()=>{toggle.setAttribute('aria-expanded','false');document.querySelector('.reader-index').classList.remove('open');});
   const last=get('ms-hydesville-chapter');const resume=document.querySelector('#resume');
   if(last && document.getElementById(last)){resume.href='#'+last;resume.hidden=false;}
-  const sections=[...document.querySelectorAll('.chapter')];
+  const sections=[...document.querySelectorAll('.chapter, .appendix-document')];
   let queued=false;
   function update(){
     queued=false;const total=document.documentElement.scrollHeight-innerHeight;
