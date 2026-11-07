@@ -10,6 +10,7 @@ from reportlab.lib.colors import HexColor
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 import pypdfium2 as pdfium
+from pypdf import PdfReader, PdfWriter
 
 ROOT = Path(__file__).resolve().parents[1]
 SITE = ROOT / 'site'
@@ -19,7 +20,16 @@ ASSETS.mkdir(parents=True, exist_ok=True)
 SOURCE = next(ROOT.glob('HYD*.docx'))
 doc = Document(SOURCE)
 chapters = [(17,'Prefazione del traduttore'),(76,'Un rapporto dei rumori misteriosi'),(297,'Commento sul valore delle testimonianze'),(333,'Ulteriore sviluppo dei fatti di Hydesville'),(344,'Valore della testimonianza del giornalista E. W. Cabron'),(358,'Confessione di Margaret Fox Kane'),(377,'Valore della confessione di Margaret'),(390,'Margaret Fox ritratta'),(394,'Commento sulla medianità delle sorelle Fox'),(430,'Ritrovamento del corpo'),(437,'Deduzioni di E. Bozzano in relazione all’errore commesso dallo spirito'),(455,'Commento di M. Polidoro sulla medianità delle sorelle Fox'),(514,'Faziosità delle affermazioni di M. Polidoro'),(544,'Commento conclusivo'),(559,'Appendice')]
-note = 'Nel manoscritto fornito l’appendice è indicata nell’indice, ma non contiene i testi originali inglesi del rapporto e della confessione di Margaret Fox. Questi documenti non sono quindi inclusi nella presente edizione.'
+note = 'L’appendice raccoglie i due documenti inglesi citati nel volume: il rapporto di E. E. Lewis del 1848 e la confessione di Margaret Fox Kane del 1888. Seguono le riproduzioni delle pagine fornite, con testo selezionabile e impaginazione conservata. La confessione è riprodotta da una stampa web che cita il New York World del 21 ottobre 1888.'
+appendices = [
+    {'id':'appendice-lewis','title':'A Report of the Mysterious Noises','subtitle':'E. E. Lewis · 1848','file':'appendice-lewis-en','pages':34,'start':1},
+    {'id':'appendice-fox','title':'Signed Confession of Margaret Fox Kane','subtitle':'Margaret Fox Kane · 1888','file':'appendice-fox-en','pages':3,'start':36},
+]
+for appendix in appendices:
+    appendix['text']=(ROOT/'sources'/'appendici'/(appendix['file']+'.txt')).read_text(encoding='utf-8-sig')
+    appendix['source_pages']=appendix['text'].split('\f')
+    assert len(appendix['source_pages'])==appendix['pages']
+    assert len(PdfReader(ASSETS/(appendix['file']+'.pdf')).pages)==appendix['pages']
 def clean(s):
     s = re.sub(r'_{8,}', '', s)
     return re.sub(r'\s+', ' ', s).strip()
@@ -104,6 +114,10 @@ for attempt in range(3):
     for s in sections:
         page=page_map.get(s['id'],'—')
         story.append(Paragraph(f'<link href="#{s["id"]}" color="#242b29">{s["number"]:02}. {html.escape(s["title"])} <font size="8">· {page}</font></link>',ParagraphStyle('Toc',parent=small,spaceAfter=10,leading=13)))
+    offset=page_map.get('base-pages',131)
+    for appendix in appendices:
+        story.append(Paragraph(f'{html.escape(appendix["title"])} <font size="8">· {offset+1}</font>',ParagraphStyle('AppendixToc',parent=small,leftIndent=16,spaceAfter=8,leading=12)))
+        offset+=appendix['pages']
     for s in sections:
         story += [PageBreak(),Paragraph(f'{s["number"]:02} /',small),Spacer(1,13)]
         p=Paragraph(html.escape(s['title']),heading);p.chapter_id=s['id'];story.append(p)
@@ -112,9 +126,42 @@ for attempt in range(3):
             style=subhead if p['subhead'] else body
             if 77<=p['i']<=103: style=small
             story.append(Paragraph(p['html'],style))
+        if s['id']=='capitolo-15':
+            for appendix in appendices:
+                story.append(Spacer(1,14))
+                story.append(Paragraph(html.escape(appendix['title']),subhead))
+                story.append(Paragraph(html.escape(appendix['subtitle']),small))
+            story.append(Spacer(1,20))
+            story.append(Paragraph('Le trascrizioni OCR sono state revisionate senza modernizzare le grafie o correggere i refusi della copia. Sul sito è disponibile anche la lettura del testo inglese, separata dai menu e dagli annunci della stampa web.',small))
     book.build(story,onFirstPage=footer,onLaterPages=footer)
+    book.chapter_pages['base-pages']=book.page
     if page_map==book.chapter_pages: break
     page_map=book.chapter_pages
+
+# Append the original page layouts after the editorial appendix introduction.
+combined=PdfWriter();base=PdfReader(pdf);combined.append(base)
+appendix_parent=combined.get_outline_root().get('/Last')
+offset=len(base.pages)
+for appendix in appendices:
+    appendix['pdf_page']=offset+1
+    combined.append(ASSETS/(appendix['file']+'.pdf'),import_outline=False)
+    combined.add_outline_item(appendix['title'],offset,parent=appendix_parent)
+    # Give both the index entry and the appendix description a clickable target.
+    for page_index in [2,page_map['capitolo-15']-1]:
+        page=combined.pages[page_index]
+        with pdfium.PdfDocument(pdf) as layout:
+            textpage=layout[page_index].get_textpage()
+            found=textpage.search(appendix['title'],match_case=True)
+            result=found.get_next()
+            if result:
+                start,count=result
+                for rect_index in range(textpage.count_rects(start,count)):
+                    rect=textpage.get_rect(rect_index)
+                    from pypdf.annotations import Link
+                    combined.add_annotation(page_index,Link(rect=rect,target_page_index=offset))
+    offset+=appendix['pages']
+combined.add_metadata({'/Title':'Hydesville, l’inizio','/Author':'E. E. Lewis; traduzione e commenti di Michele Serra','/Subject':'Edizione completa con i due documenti inglesi in appendice'})
+temporary=ASSETS/'hydesville-linizio.tmp.pdf';combined.write(temporary);temporary.replace(pdf)
 
 render=pdfium.PdfDocument(str(pdf))
 render[0].render(scale=2).to_pil().save(ASSETS/'hydesville-copertina.png')
@@ -130,6 +177,7 @@ for start in range(0,len(thumbs),40):
     for k,tile in enumerate(subset):sheet.paste(tile,((k%8)*196,(k//8)*291))
     sheet.save(ROOT/'tmp'/'qa'/f'contact-{start//40+1}.jpg')
 nav=''.join(f'<a href="#{s["id"]}"><span>{s["number"]:02}</span>{html.escape(s["title"])}</a>' for s in sections)
+nav+=''.join(f'<a class="appendix-nav" href="#{a["id"]}"><span>EN</span>{html.escape(a["title"])}</a>' for a in appendices)
 content=''
 for s in sections:
     content+=f'<section class="chapter" id="{s["id"]}"><div class="eyebrow">{s["number"]:02} / HYDESVILLE</div><h2>{html.escape(s["title"])}</h2>'
@@ -137,6 +185,20 @@ for s in sections:
         tag='h3' if p['subhead'] else 'p'
         cls=' class="original-title"' if 77<=p['i']<=103 else ''
         content+=f'<{tag}{cls}>{p["html"]}</{tag}>'
+    if s['id']=='capitolo-15':
+        content+='<div class="appendix-summary"><p>I due testi inglesi si possono leggere qui sotto o scaricare singolarmente nella riproduzione delle pagine fornite.</p><ul>'
+        for a in appendices:
+            content+=f'<li><a href="#{a["id"]}">{html.escape(a["title"])} →</a></li>'
+        content+='</ul><p class="appendix-note">Le trascrizioni OCR sono state revisionate. Sono conservate le grafie e le anomalie della copia; eventuali letture dubbie possono essere confrontate con il PDF. I menu e gli annunci della stampa web sono esclusi dalla trascrizione.</p></div>'
+        for a in appendices:
+            content+=f'<article class="appendix-document" id="{a["id"]}" lang="en"><p class="eyebrow">APPENDICE / TESTO INGLESE</p><h3>{html.escape(a["title"])}</h3><p class="appendix-byline">{html.escape(a["subtitle"])}</p><a class="text-link" lang="it" href="assets/{a["file"]}.pdf" download>Scarica il documento originale in PDF ↓</a>'
+            for j,source_page in enumerate(a['source_pages']):
+                page_text=re.sub(r'^\s*(?:FRONTESPIZIO|PAGINA \d+ DEL PDF DI ORIGINE)\s*\n=+\s*\n','',source_page).strip()
+                content+=f'<div class="appendix-source-page" id="{a["id"]}-pagina-{j+1}"><p class="source-page-label" lang="it">Pagina {j+1} di {a["pages"]} · PDF di origine, pagina {a["start"]+j}</p>'
+                for paragraph in re.split(r'\n\s*\n',page_text):
+                    content+='<p class="source-text">'+'<br>'.join(html.escape(line.strip()) for line in paragraph.splitlines())+'</p>'
+                content+='</div>'
+            content+='</article>'
     content+='</section>'
 reader=(ROOT/'templates'/'reader.html').read_text(encoding='utf-8').replace('{{NAV}}',nav).replace('{{CONTENT}}',content)
 (SITE/'leggi.html').write_text(reader,encoding='utf-8')
